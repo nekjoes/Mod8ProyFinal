@@ -1,0 +1,17 @@
+pipeline {
+    agent {label 'debian'}
+
+    stages {
+        stage('cloning') {
+            steps {
+                git branch: 'master', url: 'https://github.com/nekjoes/Mod8ProyFinal.git'
+            }
+        }
+        stage ('build'){
+            steps{
+                sh "docker-compose ps"
+            }
+        }
+        
+    }
+}
