@@ -1,5 +1,5 @@
 pipeline {
-    agent {label 'debian'}
+    agent {label 'Agente1'}
 
     stages {
         stage('cloning') {
