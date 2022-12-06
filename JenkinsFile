@@ -1,17 +1,88 @@
-pipeline {
-    agent {label 'Agente1'}
+pipeline{
+    agent none
+     parameters{
+         string defaultValue: 'Agente1', description: 'Nombre del Nodo  del ambiente en DEV,   ', name: 'AMBIENTE_DEV', trim: false
+         string defaultValue: 'Agente2', description: 'Nombre del Nodo  del ambiente QA,   ', name: 'AMBIENTE_QA', trim: false
+         string defaultValue: 'Agente3', description: 'Nombre del Nodo  del ambiente PROD,   ', name: 'AMBIENTE_PROD', trim: false
+         
 
-    stages {
-        stage('cloning') {
-            steps {
-                git branch: 'master', url: 'https://github.com/nekjoes/Mod8ProyFinal.git'
-            }
-        }
-        stage ('build'){
+     }
+    environment{
+        DEV_NODE="${params.AMBIENTE_DEV}"
+        QA_NODE="${params.AMBIENTE_QA}"
+        PROD_NODE="${params.AMBIENTE_PROD}"
+    }
+    stages{
+        stage("Clonando el Repositorio 1"){
+            agent { label DEV_NODE }
             steps{
-                bat "docker-compose ps"
+                bat "docker container rm -f trabjenkins1"
+                git branch: 'master', url: 'https://github.com/nekjoes/Mod8ProyFinal.git'
+                bat "echo ClonadoUSIP!"
             }
         }
-        
+        stage("Desplegando DEV"){
+            agent { label DEV_NODE }
+            steps{
+                bat "docker rm -f /trabjenkins1"
+                bat "docker-compose up -d --build"
+
+            }
+        }
+        stage("Preparando las Imagenes"){
+            agent { label DEV_NODE }
+            steps{
+                bat "docker save -o ReactJE.tar trabjenkins1-react-app:latest"
+                stash name: "stash-artifact", includes: "ReactJE.tar"
+                archiveArtifacts 'ReactJE.tar'
+                bat "docker save -o NodeJE.tar trabjenkins1-api-server:latest"
+                stash name: "stash-artifact2", includes: "NodeJE.tar"
+                archiveArtifacts 'NodeJE.tar'
+            }
+        }
+        stage("Ejecutando Test Curl DEV"){
+            agent { label DEV_NODE }
+            steps{
+                bat 'curl -X GET http://localhost:5000/api/students'
+            }
+        }
+        stage("Desplegando en QA"){
+            agent { label QA_NODE }
+            steps{
+                unstash "stash-artifact"
+                bat "docker load -i ReactJE.tar"
+                bat "docker rm reactvX -f || true"
+                bat "docker run -idt -p 3050:3050 --name reactvX trabjenkins1-react-app:latest"
+                unstash "stash-artifact2"
+                bat "docker load -i NodeJE.tar"
+                bat "docker rm nodevX -f || true"
+                bat "docker run -d -p 5050:5050 --name nodevX trabjenkins1-api-server:latest"
+                bat "docker container start nodevX"
+                bat "docker container start reactvX"
+            }
+        }
+        stage("Ejecutando Test Curl QA"){
+            agent { label QA_NODE }
+            steps{
+                bat 'curl -X GET http://localhost:5000/api/students'
+            }
+        }
+        stage("Desplegando en Produccion"){
+            agent { label PROD_NODE }
+            steps{
+                unstash "stash-artifact"
+                bat "docker load -i ReactJE.tar"
+                bat "docker rm reactvPR -f || true"
+                bat "docker run -idt -p 3010:30010 --name reactvPR trabjenkins1-react-app:latest"
+                bat "docker container start reactvPR"
+                unstash "stash-artifact2"
+                bat "docker load -i NodeJE.tar"
+                bat "docker rm nodevPR -f || true"
+                bat "docker run -idt -p 5010:5010 --name nodevPR trabjenkins1-api-server:latest"
+                bat "docker container start nodevPR"
+            }
+        }
+      
+       
     }
 }
